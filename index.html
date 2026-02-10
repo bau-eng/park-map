@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mappa Parcheggi</title>
+
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet/dist/leaflet.css"
+  />
+
+  <style>
+  body {
+    margin: 0;
+    font-family: sans-serif;
+  }
+
+  #controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 8px;
+    background: #f5f5f5;
+  }
+
+  #controls input,
+  #controls button {
+    font-size: 16px; /* IMPORTANTISSIMO su mobile */
+    padding: 6px;
+  }
+
+  #map {
+    height: calc(100vh - 56px);
+    width: 100vw;
+  }
+</style>
+
+</head>
+
+<body>
+
+<div id="controls">
+  <input
+    id="via"
+    type="text"
+    placeholder="Via e numero civico (es: Via Roma 10 Torino)"
+    size="40"
+  />
+
+  <input
+    id="raggio"
+    type="number"
+    placeholder="Raggio (m)"
+    value="50"
+    min="10"
+    step="10"
+  />
+
+  <button onclick="cerca()">Cerca</button>
+</div>
+
+<div id="map"></div>
+
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+<script>
+  const map = L.map("map").setView([45.1278, 7.6316], 16);
+
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    attribution: "© OpenStreetMap"
+  }).addTo(map);
+
+  const verde = L.icon({
+    iconUrl: "https://maps.gstatic.com/mapfiles/ms2/micons/green-dot.png",
+    iconSize: [32, 32]
+  });
+
+  const rosso = L.icon({
+    iconUrl: "https://maps.gstatic.com/mapfiles/ms2/micons/red-dot.png",
+    iconSize: [32, 32]
+  });
+
+  let markers = [];
+
+  function pulisciMappa() {
+    markers.forEach(m => map.removeLayer(m));
+    markers = [];
+  }
+
+  function cerca() {
+    const via = document.getElementById("via").value.trim();
+    const raggio = document.getElementById("raggio").value || 50;
+
+    if (!via) {
+      alert("Inserisci una via con numero civico");
+      return;
+    }
+
+    fetch(
+      `http://127.0.0.1:8000/parcheggi/vicini?via=${encodeURIComponent(via)}&raggio=${raggio}`
+    )
+      .then(r => r.json())
+      .then(d => {
+        if (d.errore) {
+          alert(d.errore);
+          return;
+        }
+
+        pulisciMappa();
+
+        // centro la mappa sull'indirizzo cercato
+        map.setView(
+          [d.coordinate.lat, d.coordinate.lng],
+          18
+        );
+
+        if (d.parcheggi.length === 0) {
+          alert("Nessun parcheggio trovato nel raggio scelto");
+          return;
+        }
+
+        // disegno cerchio del raggio
+L.circle([d.coordinate.lat, d.coordinate.lng], {
+  radius: Number(raggio),
+  color: "#3388ff",
+  fill: false
+}).addTo(map);
+
+// mostra solo parcheggi liberi
+d.parcheggi
+  .filter(p => p.libero) // FILTRO
+  .forEach(p => {
+    const marker = L.marker(
+      [p.lat, p.lng],
+      { icon: verde } // solo verde perché sono liberi
+    )
+    .addTo(map)
+    .bindPopup(
+      `ID: ${p.id}<br>
+       Stato: Libero<br>
+       Distanza: ${p.distanza_m} m`
+    );
+
+    markers.push(marker);
+  });
+
+      })
+      .catch(err => {
+        console.error(err);
+        alert("Errore di connessione al backend");
+      });
+  }
+</script>
+
+</body>
+</html>
